@@ -55,7 +55,7 @@ import           Text.ParserCombinators.Parsec
 -- | A query index. It is required for each field that shall be queryable
 -- or indexable. The 'public' and 'private' functions can be used to generate
 -- 'Qr' objects.
-data Qr a = forall x. (Ord x, Typeable x) => Qr (Maybe (String, String -> x)) 
+data Qr a = forall x. (Ord x, Typeable x) => Qr (Maybe (String, String -> Maybe x)) 
                                                 (a -> [x]) 
 
 -- | Generates a queryable index and returns a 'Qr'. If you generate a public
@@ -63,7 +63,7 @@ data Qr a = forall x. (Ord x, Typeable x) => Qr (Maybe (String, String -> x))
 public :: (Ord x, Typeable x) => 
              String -- ^ Name of the queryable field (can be arbitrary)
           -> (a -> [x]) -- ^ Function for generating 'IxSet' indices (see 'ixFun')
-          -> (String -> x)  -- ^ Function for turning Strings into query keys
+          -> (String -> Maybe x)  -- ^ Function for turning Strings into query keys
           -> Qr a 
 public s k r = Qr (Just (s, r)) k
 
@@ -83,11 +83,11 @@ findQ :: [Qr a] -> String -> Maybe (Qr a)
 findQ [] _ = Nothing
 findQ ((Qr (Just s) a):rest) x | x == fst s = Just (Qr (Just s) a)
                                | otherwise = findQ rest x
-findQ _ _ = Nothing
+findQ (_:rest) x = findQ rest x
 
-mkQ :: forall a y. Qr a -> String -> (forall x. (Ord x, Typeable x) => x -> y) -> y
-mkQ (Qr (Just (_, rd)) _) v f = f $ rd v
-mkQ _ _ _ = error "Access to a private field. This should be impossible."
+mkQ :: forall a y. Qr a -> String -> (forall x. (Ord x, Typeable x) => x -> y) -> Maybe y
+mkQ (Qr (Just (_, rd)) _) v f = f <$> rd v
+mkQ _ _ _ = Nothing
 
 -- | The IxQueryable class is similar to the 'Indexable' class. You must supply
 -- a list of index generator functions (see 'public' and 'private') in your
@@ -105,7 +105,9 @@ runQ :: (IxQueryable a, Typeable a, Ord a) => String -> (forall b. (Ord b, Typea
 runQ field fun value ixs =
    case findQ (getqt ixs) field of
       Nothing -> Left $ "No such field: " ++ field
-      Just qr -> Right $ (mkQ qr value) fun ixs
+      Just qr -> case mkQ qr value fun of
+                   Just f    -> Right $ f ixs
+                   Nothing   -> Left $ "Cannot parse value for field " ++ field
 
 -- | A query that can be issued over an 'IxSet'. This is done by the 'runQuery'
 -- function.
