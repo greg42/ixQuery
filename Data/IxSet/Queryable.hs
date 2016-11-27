@@ -55,8 +55,8 @@ import           Text.ParserCombinators.Parsec
 -- | A query index. It is required for each field that shall be queryable
 -- or indexable. The 'public' and 'private' functions can be used to generate
 -- 'Qr' objects.
-data Qr a = forall x. (Ord x, Typeable x) => Qr (Maybe String) (a -> [x]) 
-                                                (String -> x)
+data Qr a = forall x. (Ord x, Typeable x) => Qr (Maybe (String, String -> x)) 
+                                                (a -> [x]) 
 
 -- | Generates a queryable index and returns a 'Qr'. If you generate a public
 -- index named @foo@, you can later run queries like @foo = myValue@. 
@@ -65,7 +65,7 @@ public :: (Ord x, Typeable x) =>
           -> (a -> [x]) -- ^ Function for generating 'IxSet' indices (see 'ixFun')
           -> (String -> x)  -- ^ Function for turning Strings into query keys
           -> Qr a 
-public s k r = Qr (Just s) k r
+public s k r = Qr (Just (s, r)) k
 
 -- | Generates an indexable, but not queryable index and returns a 'Qr'. This
 -- means that you will be able to use functions like '@=' to issue queries, but
@@ -74,19 +74,20 @@ public s k r = Qr (Just s) k r
 private :: (Ord x, Typeable x) => 
               (a -> [x]) -- ^ Function for generating 'IxSet' indices (see 'ixFun')
            -> Qr a
-private k = Qr Nothing k undefined
+private k = Qr Nothing k 
 
 mkfun :: Qr t -> Data.IxSet.Ix.Ix t
-mkfun (Qr _ a _) = ixFun $ a
+mkfun (Qr _ a) = ixFun $ a
 
 findQ :: [Qr a] -> String -> Maybe (Qr a)
 findQ [] _ = Nothing
-findQ ((Qr (Just s) a b):rest) x | x == s    = Just (Qr (Just s) a b)
-                                 | otherwise = findQ rest x
+findQ ((Qr (Just s) a):rest) x | x == fst s = Just (Qr (Just s) a)
+                               | otherwise = findQ rest x
 findQ _ _ = Nothing
 
 mkQ :: forall a y. Qr a -> String -> (forall x. (Ord x, Typeable x) => x -> y) -> y
-mkQ (Qr _ _ rd) v f = f $ rd v
+mkQ (Qr (Just (_, rd)) _) v f = f $ rd v
+mkQ _ _ _ = error "Access to a private field. This should be impossible."
 
 -- | The IxQueryable class is similar to the 'Indexable' class. You must supply
 -- a list of index generator functions (see 'public' and 'private') in your
