@@ -19,7 +19,7 @@ library
   exposed-modules:     Data.IxSet.Queryable
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base >=4.8 && <4.10,
+  build-depends:       base >=4.8 && <5,
                        ixset >= 1.0 && < 1.2,
                        parsec
   -- hs-source-dirs:      
